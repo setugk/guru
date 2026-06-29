@@ -105,19 +105,19 @@
     .class-edit-btn:hover { color: var(--text-2); }
 
     /* Payments */
-    .pay-summary { margin: 4px 16px 10px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; }
-    .pay-summary-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
-    .pay-summary-row + .pay-summary-row { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; }
-    .pay-currency-label { font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.4px; }
-    .pay-summary-items { display: flex; gap: 18px; }
-    .pay-summary-item { text-align: right; }
-    .pay-summary-val { font-size: 15px; font-weight: 700; }
-    .pay-summary-lbl { font-size: 10px; color: var(--text-muted); }
+    .pay-section-head { padding: 16px 16px 8px; }
+    .pay-section-title { font-size: 13px; font-weight: 600; color: var(--text-2); letter-spacing: 0.2px; }
+    .pay-none-label { font-size: 14px; color: var(--text-muted); padding: 4px 16px 16px; }
     .pay-card { margin: 0 16px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
     .pay-card:active { background: var(--bg-subtle); }
-    .pay-card-info { flex: 1; }
+    .pay-card-info { flex: 1; min-width: 0; }
     .pay-student-name { font-size: 15px; font-weight: 600; }
     .pay-amount { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+    .pay-mark-btn { background: var(--accent); color: var(--accent-fg); border: none; border-radius: var(--radius-sm); padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; white-space: nowrap; font-family: inherit; }
+    .pay-mark-btn:active { opacity: 0.8; }
+    .pay-utd-toggle { width: 100%; display: flex; align-items: center; gap: 8px; background: none; border: none; border-top: 1px solid var(--border); padding: 14px 16px; font-size: 14px; font-weight: 500; color: var(--text-2); cursor: pointer; font-family: inherit; text-align: left; margin-top: 4px; }
+    .pay-utd-toggle svg { flex-shrink: 0; transition: transform 0.2s; }
+    .pay-utd-toggle.open svg { transform: rotate(180deg); }
 
     /* Overlay & sheets */
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.22s; }
@@ -527,7 +527,7 @@ let schedulingStudentId = null, scheduleSimpleMode = false;
 let editingBandishStudentId = null, editingBandishId = null;
 let currentTab = 'schedule', scheduleDay = 0;
 let payStudentId = null;
-let showArchived = false, pastLessonsOpen = false;
+let showArchived = false, pastLessonsOpen = false, payUpToDateOpen = false;
 
 // ── Persistence ────────────────────────────────────────────────────────────
 function load() {
@@ -709,63 +709,69 @@ function toggleArchived() { showArchived = !showArchived; renderStudents(documen
 function renderPayments() {
   const summaryEl = document.getElementById('pay-summary');
   const listEl    = document.getElementById('payments-list');
-  const active = students.filter(s => !s.archived);
+  const active    = students.filter(s => !s.archived);
+
+  summaryEl.innerHTML = '';
 
   if (!active.length) {
-    summaryEl.innerHTML = '';
     listEl.innerHTML = `<div class="empty-state"><div class="empty-icon">💳</div><div class="empty-title">No students</div></div>`;
     return;
   }
 
-  // Aggregate totals due per currency
-  const byCurr = {};
-  active.forEach(s => {
-    const ps = getPaymentStatus(s);
-    if (!ps.rate) return;
-    const c = studentCurrency(s);
-    if (!byCurr[c]) byCurr[c] = { due: 0 };
-    byCurr[c].due += ps.amountDue;
-  });
-  const currKeys = Object.keys(byCurr).filter(c => byCurr[c].due > 0);
-  summaryEl.innerHTML = currKeys.length ? `<div class="pay-summary" style="margin-top:12px;">${currKeys.map(c =>
-    `<div class="pay-summary-row">
-      <span class="pay-currency-label">${esc(c)}</span>
-      <div class="pay-summary-items">
-        <div class="pay-summary-item"><div class="pay-summary-val" style="color:var(--warning)">${byCurr[c].due.toLocaleString()}</div><div class="pay-summary-lbl">Due</div></div>
-      </div>
-    </div>`).join('')}</div>` : '';
+  const dueStudents = active.filter(s => getPaymentStatus(s).isDue);
+  const okStudents  = active.filter(s => { const ps = getPaymentStatus(s); return ps.rate && !ps.isDue; })
+                            .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Sort: due first, then by name
-  const sorted = [...active].sort((a, b) => {
-    const da = getPaymentStatus(a).isDue ? 0 : 1;
-    const db = getPaymentStatus(b).isDue ? 0 : 1;
-    return da - db || a.name.localeCompare(b.name);
-  });
+  let html = '';
 
-  listEl.innerHTML = sorted.map(s => {
-    const c  = studentCurrency(s);
-    const ps = getPaymentStatus(s);
-    let badge, sub;
-    if (!ps.rate) {
-      badge = `<span class="badge badge-none">No rate</span>`;
-      sub   = 'Set class rate in profile';
-    } else if (ps.isDue) {
-      badge = `<span class="badge badge-overdue">Due</span>`;
-      sub   = `${c}${ps.amountDue.toLocaleString()} · ${ps.batches * ps.cadence} classes`;
-    } else {
-      badge = `<span class="badge badge-paid">OK</span>`;
-      sub   = `${ps.progress}/${ps.cadence} classes toward next`;
+  // Payment due section
+  html += `<div class="pay-section-head"><span class="pay-section-title">Payment due</span></div>`;
+  if (!dueStudents.length) {
+    html += `<div class="pay-none-label">No payments due right now</div>`;
+  } else {
+    html += dueStudents.map(s => {
+      const c  = studentCurrency(s);
+      const ps = getPaymentStatus(s);
+      return `
+        <div class="pay-card" onclick="openDetail('${s.id}')">
+          <div class="avatar">${esc(initials(s.name))}</div>
+          <div class="pay-card-info">
+            <div class="pay-student-name">${esc(s.name)}</div>
+            <div class="pay-amount">${c}${ps.amountDue.toLocaleString()} · ${ps.batches * ps.cadence} classes</div>
+          </div>
+          <button class="pay-mark-btn" onclick="event.stopPropagation();openPaySheet('${s.id}')">Mark paid</button>
+        </div>`;
+    }).join('');
+  }
+
+  // Completed payment section (collapsible)
+  if (okStudents.length) {
+    html += `
+      <button class="pay-utd-toggle${payUpToDateOpen ? ' open' : ''}" onclick="togglePayUpToDate()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        Completed payment <span style="color:var(--text-muted);font-weight:400;margin-left:4px;">(${okStudents.length})</span>
+      </button>`;
+    if (payUpToDateOpen) {
+      html += okStudents.map(s => {
+        const ps = getPaymentStatus(s);
+        return `
+          <div class="pay-card" onclick="openDetail('${s.id}')">
+            <div class="avatar">${esc(initials(s.name))}</div>
+            <div class="pay-card-info">
+              <div class="pay-student-name">${esc(s.name)}</div>
+              <div class="pay-amount">${ps.progress}/${ps.cadence} classes toward next</div>
+            </div>
+          </div>`;
+      }).join('');
     }
-    return `
-      <div class="pay-card" onclick="openDetail('${s.id}')">
-        <div class="avatar">${esc(initials(s.name))}</div>
-        <div class="pay-card-info">
-          <div class="pay-student-name">${esc(s.name)}</div>
-          <div class="pay-amount">${sub}</div>
-        </div>
-        ${badge}
-      </div>`;
-  }).join('');
+  }
+
+  listEl.innerHTML = html;
+}
+
+function togglePayUpToDate() {
+  payUpToDateOpen = !payUpToDateOpen;
+  renderPayments();
 }
 
 // ── Student detail ─────────────────────────────────────────────────────────
