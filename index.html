@@ -612,7 +612,11 @@ function addDays(dateStr, n) {
 function dayLabel(ds) { const [y,m,d]=ds.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)).toLocaleDateString('en-US',{weekday:'short'}); }
 function dayNum(ds)   { return String(+ds.split('-')[2]); }
 
-function guruLocalToUTC(date, time) { return new Date(`${date}T${time}:00`).toISOString(); }
+function guruLocalToUTC(date, time) {
+  const [y, m, d] = date.split('-').map(Number);
+  const [h, min]  = time.split(':').map(Number);
+  return new Date(y, m - 1, d, h, min, 0).toISOString();
+}
 function utcToGuruLocal(utcISO) {
   const str = new Date(utcISO).toLocaleString('sv-SE', { timeZone: guruTZ });
   return { date: str.slice(0,10), time: str.slice(11,16) };
@@ -1785,7 +1789,7 @@ document.getElementById('sc-save').addEventListener('click', saveScheduleClass);
 document.getElementById('sc-clear').addEventListener('click', clearNextClass);
 ['sc-date','sc-time','sc-duration'].forEach(id=>{
   const el = document.getElementById(id);
-  if (el) el.addEventListener('input', updateSchedulePreview);
+  if (el) { el.addEventListener('input', updateSchedulePreview); el.addEventListener('change', updateSchedulePreview); }
 });
 document.getElementById('sc-student-select').addEventListener('change', ()=>{
   const id = document.getElementById('sc-student-select').value;
