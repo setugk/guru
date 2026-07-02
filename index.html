@@ -558,6 +558,8 @@ let showArchived = false, pastLessonsOpen = false, payUpToDateOpen = false;
 function load() {
   try { students = JSON.parse(localStorage.getItem(LS_STUDENTS)) || []; } catch { students = []; }
   try { settings = { teacherName: '', ...JSON.parse(localStorage.getItem(LS_SETTINGS)) }; } catch {}
+  // migrate: ensure every payment has an id (old records may be missing one)
+  students.forEach(s => (s.payments||[]).forEach(p => { if (!p.id) p.id = uid(); }));
 }
 function saveStudents() { localStorage.setItem(LS_STUDENTS, JSON.stringify(students)); }
 function saveSettings()  { localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); }
@@ -1029,9 +1031,10 @@ function renderDetailPayments(s) {
     ? `<div class="lessons-section-head"><span class="lessons-section-title">Payment history</span></div>` +
       payments.map(p => {
         const pStatus = p.status || 'paid';
+        const pCurr   = p.currency || c;
         return `<div class="class-history-item">
           <div>
-            <div style="font-size:14px;font-weight:500;">${c}${(p.amount||0).toLocaleString()}</div>
+            <div style="font-size:14px;font-weight:500;">${pCurr}${(p.amount||0).toLocaleString()}</div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.classesCount||0} class${(p.classesCount||0)!==1?'es':''} · ${p.paidDate ? fmtDate(p.paidDate) : '—'}</div>
           </div>
           <div class="class-status-btns">
@@ -1408,7 +1411,7 @@ function savePayment() {
   const amount   = parseFloat(document.getElementById('p-amount').value) || 0;
   const paidDate = document.getElementById('p-date').value;
   if (!s.payments) s.payments = [];
-  s.payments.push({ id: uid(), classesCount, amount, paidDate, status: 'paid' });
+  s.payments.push({ id: uid(), classesCount, amount, paidDate, status: 'paid', currency: studentCurrency(s) });
   saveStudents();
   closeSheet('payment-sheet');
   renderDetailPayments(s);
