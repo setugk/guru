@@ -196,8 +196,7 @@
     .day-chip.selected { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
     /* TZ / conflict boxes */
-    .tz-preview { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 14px; font-size: 13px; color: var(--text-2); margin-bottom: 12px; display: none; }
-    .tz-preview.visible { display: block; }
+    .form-display { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 15px; color: var(--text-2); background: var(--bg-subtle); box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .conflict-box { background: var(--warning-bg); border: 1px solid #F59E0B; border-radius: var(--radius-sm); padding: 9px 14px; font-size: 13px; color: #92400E; margin-bottom: 12px; display: none; }
     .conflict-box.visible { display: block; }
 
@@ -471,12 +470,14 @@
       <span style="font-size:15px;font-weight:600;" id="sc-student-label"></span>
     </div>
     <!-- Date + time -->
+    <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="sc-date"></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="sc-date"></div>
       <div class="form-group"><label class="form-label">Your time</label><input type="time" class="form-input" id="sc-time"></div>
+      <div class="form-group" id="sc-stu-time-group" style="display:none">
+        <label class="form-label" id="sc-stu-time-label">Student's time</label>
+        <div class="form-display" id="sc-stu-time">—</div>
+      </div>
     </div>
-    <!-- Student's local time preview -->
-    <div class="tz-preview" id="sc-tz-preview"></div>
     <!-- Conflict warning -->
     <div class="conflict-box" id="sc-conflict"></div>
     <!-- Extra fields (hidden in simple/create mode) -->
@@ -1367,46 +1368,42 @@ function updateSchedulePreview() {
   const date = document.getElementById('sc-date').value;
   const time = document.getElementById('sc-time').value;
 
-  const tzPreview = document.getElementById('sc-tz-preview');
-  const conflictBox = document.getElementById('sc-conflict');
+  const stuTimeGroup = document.getElementById('sc-stu-time-group');
+  const stuTimeEl    = document.getElementById('sc-stu-time');
+  const stuTimeLbl   = document.getElementById('sc-stu-time-label');
+  const conflictBox  = document.getElementById('sc-conflict');
 
-  if (!date || !time) {
-    tzPreview.classList.remove('visible');
-    conflictBox.classList.remove('visible');
-    return;
+  // Show student time column only when student has a different timezone
+  if (s?.timezone) {
+    const firstName = s.name.split(' ')[0];
+    stuTimeLbl.textContent = `${firstName}'s time`;
+    stuTimeGroup.style.display = '';
+    if (date && time) {
+      try {
+        const utcISO = guruLocalToUTC(date, time);
+        stuTimeEl.textContent = `${fmtTimeInTZ(utcISO, s.timezone)} ${tzAbbr(s.timezone)}`;
+      } catch { stuTimeEl.textContent = '—'; }
+    } else {
+      stuTimeEl.textContent = '—';
+    }
+  } else {
+    stuTimeGroup.style.display = 'none';
   }
 
+  // Conflict detection
+  if (!date || !time || !sid) { conflictBox.classList.remove('visible'); return; }
   try {
     const utcISO = guruLocalToUTC(date, time);
-
-    // Student TZ preview
-    if (s?.timezone) {
-      const sTime = fmtTimeInTZ(utcISO, s.timezone);
-      const abbr = tzAbbr(s.timezone);
-      tzPreview.textContent = `${s.name}'s time: ${sTime} ${abbr}`;
-      tzPreview.classList.add('visible');
-    } else {
-      tzPreview.classList.remove('visible');
-    }
-
-    // Conflict detection
-    if (sid) {
-      const dur = scheduleSimpleMode ? (s?.classDuration||60) : (parseInt(document.getElementById('sc-duration').value)||60);
-      const conflicts = checkConflict(sid, utcISO, dur);
-      if (conflicts.length) {
-        const names = conflicts.map(x=>`${esc(x.name)} at ${fmtTimeInTZ(x.nextClass.utcISO,guruTZ)}`).join(', ');
-        conflictBox.innerHTML = `⚠ Conflicts with: ${names}`;
-        conflictBox.classList.add('visible');
-      } else {
-        conflictBox.classList.remove('visible');
-      }
+    const dur = scheduleSimpleMode ? (s?.classDuration||60) : (parseInt(document.getElementById('sc-duration').value)||60);
+    const conflicts = checkConflict(sid, utcISO, dur);
+    if (conflicts.length) {
+      const names = conflicts.map(x=>`${esc(x.name)} at ${fmtTimeInTZ(x.nextClass.utcISO,guruTZ)}`).join(', ');
+      conflictBox.innerHTML = `⚠ Conflicts with: ${names}`;
+      conflictBox.classList.add('visible');
     } else {
       conflictBox.classList.remove('visible');
     }
-  } catch {
-    tzPreview.classList.remove('visible');
-    conflictBox.classList.remove('visible');
-  }
+  } catch { conflictBox.classList.remove('visible'); }
 }
 
 function saveScheduleClass() {
