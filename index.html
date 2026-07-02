@@ -481,14 +481,13 @@
         <div class="form-display" id="sc-stu-time">—</div>
       </div>
     </div>
+    <!-- Notes (always visible) -->
+    <div class="form-group"><label class="form-label">Notes</label><input type="text" class="form-input" id="sc-notes" placeholder="optional"></div>
     <!-- Conflict warning -->
     <div class="conflict-box" id="sc-conflict"></div>
     <!-- Extra fields (hidden in simple/create mode) -->
     <div id="sc-extra-fields">
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Duration (min)</label><input type="number" class="form-input" id="sc-duration" placeholder="60" min="15" step="15"></div>
-        <div class="form-group"><label class="form-label">Notes</label><input type="text" class="form-input" id="sc-notes" placeholder="optional"></div>
-      </div>
+      <div class="form-group"><label class="form-label">Duration (min)</label><input type="number" class="form-input" id="sc-duration" placeholder="60" min="15" step="15"></div>
     </div>
   </div>
   <div class="sheet-footer">
@@ -1188,7 +1187,7 @@ function renderClassesPanel(s) {
         <div style="font-size:13px;color:var(--text-3);margin-top:2px;">${dateStr} · ${s.nextClass.duration||60} min</div>
         ${stuLine}${notesLine}
       </div>
-      <button class="btn btn-secondary" style="width:100%;" onclick="openScheduleSheet('${s.id}',false)">Reschedule</button>`;
+      <button class="btn btn-secondary" style="width:100%;" onclick="openScheduleSheet('${s.id}',false)">Edit</button>`;
   } else {
     upcomingEl.innerHTML = `
       <div class="lessons-section-head" style="margin-top:0;"><span class="lessons-section-title">Upcoming</span></div>
@@ -1308,7 +1307,7 @@ function toggleSchedCard(el) {
     </div>`;
   } else {
     actionsHTML = `<div class="class-actions">
-      <button class="class-action-btn action-reschedule" onclick="event.stopPropagation();openScheduleSheet('${sid}',false)">↻ Reschedule</button>
+      <button class="class-action-btn action-reschedule" onclick="event.stopPropagation();openScheduleSheet('${sid}',false)">✏ Edit</button>
       <button class="class-action-btn action-profile" onclick="event.stopPropagation();openDetail('${sid}')">Profile</button>
     </div>`;
   }
@@ -1340,7 +1339,7 @@ function openScheduleSheet(studentId, simple) {
   scheduleSimpleMode = simple;
 
   const s = studentId ? students.find(x=>x.id===studentId) : null;
-  document.getElementById('sc-title').textContent = simple ? 'Create Schedule' : (s?.nextClass ? 'Reschedule' : 'Schedule Class');
+  document.getElementById('sc-title').textContent = simple ? 'Schedule Class' : (s?.nextClass ? 'Edit Schedule' : 'Schedule Class');
 
   const isCreate = !studentId || simple;
   document.getElementById('sc-student-group').style.display = isCreate ? 'block' : 'none';
@@ -1395,18 +1394,22 @@ function updateSchedulePreview() {
   const stuTimeLbl   = document.getElementById('sc-stu-time-label');
   const conflictBox  = document.getElementById('sc-conflict');
 
-  // Show student time column only when student has a different timezone
-  if (s?.timezone) {
+  // Show student time whenever a student is selected
+  if (s) {
     const firstName = s.name.split(' ')[0];
     stuTimeLbl.textContent = `${firstName}'s time`;
-    stuTimeGroup.style.display = '';
     if (date && time) {
       try {
+        const tz = s.timezone || guruTZ;
         const utcISO = guruLocalToUTC(date, time);
-        stuTimeEl.textContent = `${fmtTimeInTZ(utcISO, s.timezone)} ${tzAbbr(s.timezone)}`;
-      } catch { stuTimeEl.textContent = '—'; }
+        const stuTime = fmtTimeInTZ(utcISO, tz);
+        const abbr = (s.timezone && s.timezone !== guruTZ) ? ` ${tzAbbr(tz)}` : '';
+        stuTimeEl.textContent = stuTime + abbr;
+        stuTimeGroup.style.display = 'block';
+      } catch { stuTimeGroup.style.display = 'none'; }
     } else {
       stuTimeEl.textContent = '—';
+      stuTimeGroup.style.display = 'block';
     }
   } else {
     stuTimeGroup.style.display = 'none';
@@ -1456,7 +1459,7 @@ function saveScheduleClass() {
   s.nextClass = {
     utcISO: newUtcISO,
     duration: dur,
-    notes: scheduleSimpleMode ? '' : document.getElementById('sc-notes').value.trim()
+    notes: document.getElementById('sc-notes').value.trim()
   };
   saveStudents();
   closeSheet('schedule-class-sheet');
