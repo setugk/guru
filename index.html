@@ -231,7 +231,9 @@
     .class-status-btn { flex: 1; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: none; color: var(--text-3); font-family: inherit; transition: all 0.1s; }
     .class-status-btn.completed { background: var(--success-bg); border-color: var(--success); color: var(--success); }
     .class-status-btn.missed    { background: var(--danger-bg);  border-color: var(--danger);  color: var(--danger);  }
-    .class-status-btn:not(.completed):not(.missed):hover { border-color: var(--border-mid); color: var(--text-2); }
+    .class-status-btn.paid      { background: var(--success-bg); border-color: var(--success); color: var(--success); }
+    .class-status-btn.due       { background: var(--warning-bg); border-color: #F59E0B;        color: var(--warning); }
+    .class-status-btn:not(.completed):not(.missed):not(.paid):not(.due):hover { border-color: var(--border-mid); color: var(--text-2); }
     .class-history-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
     .class-history-item:last-child { border-bottom: none; }
 
@@ -599,7 +601,7 @@ function getPaymentStatus(s) {
   const cadence  = s.payEveryNClasses || 4;
   const rate     = s.classRate || 0;
   const completed  = (s.classHistory||[]).filter(c => c.status === 'completed').length;
-  const paidClasses = (s.payments||[]).reduce((sum, p) => sum + (p.classesCount||0), 0);
+  const paidClasses = (s.payments||[]).filter(p => (p.status||'paid') === 'paid').reduce((sum, p) => sum + (p.classesCount||0), 0);
   const unpaid   = completed - paidClasses;
   const batches  = Math.floor(Math.max(0, unpaid) / cadence);
   const amountDue = batches * cadence * rate;
@@ -1025,16 +1027,19 @@ function renderDetailPayments(s) {
   const payments = (s.payments||[]).slice().sort((a,b) => (b.paidDate||'').localeCompare(a.paidDate||''));
   const historyHTML = payments.length
     ? `<div class="lessons-section-head"><span class="lessons-section-title">Payment history</span></div>` +
-      payments.map(p => `
-      <div class="detail-row" style="align-items:center;">
-        <div style="flex:1;">
-          <div style="font-size:14px;font-weight:500;">${c}${(p.amount||0).toLocaleString()}</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.classesCount||0} class${(p.classesCount||0)!==1?'es':''} · ${p.paidDate ? fmtDate(p.paidDate) : '—'}</div>
-        </div>
-        <button class="sheet-hdr-btn" onclick="deletePayment('${s.id}','${p.id}')" title="Remove payment" style="color:var(--danger);">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-        </button>
-      </div>`).join('')
+      payments.map(p => {
+        const pStatus = p.status || 'paid';
+        return `<div class="class-history-item">
+          <div>
+            <div style="font-size:14px;font-weight:500;">${c}${(p.amount||0).toLocaleString()}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.classesCount||0} class${(p.classesCount||0)!==1?'es':''} · ${p.paidDate ? fmtDate(p.paidDate) : '—'}</div>
+          </div>
+          <div class="class-status-btns">
+            <button class="class-status-btn${pStatus==='paid'?' paid':''}" onclick="togglePaymentStatus('${s.id}','${p.id}','paid')">Paid</button>
+            <button class="class-status-btn${pStatus==='due'?' due':''}"  onclick="togglePaymentStatus('${s.id}','${p.id}','due')">Due</button>
+          </div>
+        </div>`;
+      }).join('')
     : `<p style="font-size:13px;color:var(--text-muted);padding:6px 0;">No payments recorded yet.</p>`;
 
   el.innerHTML = statusHTML + historyHTML;
@@ -1403,17 +1408,22 @@ function savePayment() {
   const amount   = parseFloat(document.getElementById('p-amount').value) || 0;
   const paidDate = document.getElementById('p-date').value;
   if (!s.payments) s.payments = [];
-  s.payments.push({ id: uid(), classesCount, amount, paidDate });
+  s.payments.push({ id: uid(), classesCount, amount, paidDate, status: 'paid' });
   saveStudents();
   closeSheet('payment-sheet');
   renderDetailPayments(s);
   if (currentTab === 'payments') renderPayments();
 }
 
-function deletePayment(studentId, paymentId) {
+function togglePaymentStatus(studentId, paymentId, newStatus) {
   const s = students.find(x => x.id === studentId);
-  if (!s) return;
-  s.payments = (s.payments||[]).filter(p => p.id !== paymentId);
+  const p = (s?.payments||[]).find(x => x.id === paymentId);
+  if (!p || (p.status||'paid') === newStatus) return;
+  const msg = newStatus === 'due'
+    ? 'Mark this payment as due? It will be added back to the outstanding balance.'
+    : 'Mark this payment as paid?';
+  if (!confirm(msg)) return;
+  p.status = newStatus;
   saveStudents();
   renderDetailPayments(s);
   if (currentTab === 'payments') renderPayments();
