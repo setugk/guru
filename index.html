@@ -105,6 +105,25 @@
     .sched-date-head { padding: 14px 20px 6px; font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
     .sched-date-head.today { color: var(--accent); }
     .sched-no-class { padding: 8px 20px 10px; font-size: 13px; color: var(--text-muted); }
+    /* Calendar grid (month view) */
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); padding: 4px 10px; gap: 2px; }
+    .cal-head { text-align: center; font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 4px 0 8px; letter-spacing: 0.3px; }
+    .cal-cell { display: flex; flex-direction: column; align-items: center; padding: 5px 2px 7px; border-radius: var(--radius-sm); min-height: 54px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background 0.1s; }
+    .cal-cell.empty, .cal-cell.no-class { cursor: default; }
+    .cal-cell:not(.empty):not(.no-class):active { background: var(--bg-subtle); }
+    .cal-cell.selected { background: var(--bg-subtle); }
+    .cal-day { font-size: 14px; font-weight: 500; color: var(--text); width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink: 0; }
+    .cal-cell.today .cal-day { background: var(--accent); color: var(--accent-fg); font-weight: 700; }
+    .cal-cell.selected:not(.today) .cal-day { background: #E5E5E5; font-weight: 700; }
+    .cal-dots { display: flex; gap: 3px; margin-top: 4px; align-items: center; justify-content: center; flex-wrap: wrap; max-width: 36px; }
+    .cal-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+    .cal-dot.upcoming { background: var(--accent); }
+    .cal-dot.completed { background: var(--success); }
+    .cal-dot.missed { background: var(--danger); }
+    .cal-dot.unmarked { background: var(--text-muted); }
+    .cal-more { font-size: 9px; color: var(--text-muted); font-weight: 600; line-height: 5px; }
+    .cal-detail-head { padding: 16px 20px 6px; font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; border-top: 1px solid var(--border); margin: 8px 0 0; }
+    .cal-detail-head.today { color: var(--accent); }
     .sched-status-badge { font-size: 12px; font-weight: 700; flex-shrink: 0; padding: 3px 8px; border-radius: 20px; margin-top: 2px; line-height: 1.4; }
     .sched-status-badge.completed { color: var(--success); background: var(--success-bg); }
     .sched-status-badge.missed    { color: var(--danger);  background: var(--danger-bg);  }
@@ -565,7 +584,7 @@ let schedulingStudentId = null, scheduleSimpleMode = false;
 let editingBandishStudentId = null, editingBandishId = null;
 let currentTab = 'schedule';
 let schedMode = 'list', schedWeekOffset = 0, schedWeekDay = 0, schedMonthOffset = 0;
-let schedExpandedKey = null;
+let schedExpandedKey = null, schedCalDate = null;
 let payStudentId = null, payEditingId = null;
 let showArchived = false, pastLessonsOpen = false, payUpToDateOpen = false;
 
@@ -728,6 +747,7 @@ function setSchedMode(mode) {
   schedWeekOffset = 0;
   schedWeekDay = 0;
   schedMonthOffset = 0;
+  schedCalDate = null;
   document.querySelectorAll('.sched-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   renderSchedule();
 }
@@ -798,27 +818,80 @@ function renderSchedWeek() {
 }
 
 function renderSchedMonth() {
-  const today   = guruToday();
+  const today    = guruToday();
   const [cy, cm] = today.split('-').map(Number);
-  const tgt     = new Date(cy, cm - 1 + schedMonthOffset, 1);
-  const year    = tgt.getFullYear(), month = tgt.getMonth();
+  const tgt      = new Date(cy, cm - 1 + schedMonthOffset, 1);
+  const year     = tgt.getFullYear(), month = tgt.getMonth();
   const monthStr = tgt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  const pad     = n => String(n).padStart(2, '0');
-  const mStart  = `${year}-${pad(month + 1)}-01`;
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  const mEnd    = `${year}-${pad(month + 1)}-${pad(lastDay)}`;
+  const pad      = n => String(n).padStart(2, '0');
+  const lastDay  = new Date(year, month + 1, 0).getDate();
+  const mStart   = `${year}-${pad(month + 1)}-01`;
+  const mEnd     = `${year}-${pad(month + 1)}-${pad(lastDay)}`;
+
   document.getElementById('sched-nav').innerHTML = `
-    <button class="sched-nav-btn" onclick="schedMonthOffset--;renderSchedule()">‹</button>
+    <button class="sched-nav-btn" onclick="schedMonthOffset--;schedCalDate=null;renderSchedule()">‹</button>
     <span class="sched-nav-label">${monthStr}</span>
-    <button class="sched-nav-btn" onclick="schedMonthOffset++;renderSchedule()">›</button>`;
-  const events = getAllClassEvents().filter(e => { const d = utcToGuruDateStr(e.utcISO); return d >= mStart && d <= mEnd; });
-  const listEl = document.getElementById('schedule-list');
-  if (!events.length) {
-    listEl.innerHTML = `<div class="empty-state" style="padding:48px 32px;"><div class="empty-icon">🥁</div><div class="empty-title">No classes in ${monthStr}</div></div>`;
-    return;
+    <button class="sched-nav-btn" onclick="schedMonthOffset++;schedCalDate=null;renderSchedule()">›</button>`;
+
+  // Build date → events map for this month
+  const groups = {};
+  getAllClassEvents().forEach(e => {
+    const d = utcToGuruDateStr(e.utcISO);
+    if (d >= mStart && d <= mEnd) { if (!groups[d]) groups[d] = []; groups[d].push(e); }
+  });
+
+  const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
+  const DOW     = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+  const dotCls = e => !e.isPast ? 'upcoming' : e.status === 'completed' ? 'completed' : e.status === 'missed' ? 'missed' : 'unmarked';
+
+  const cellDotsHTML = dayEvts => {
+    if (!dayEvts.length) return '';
+    const sorted = dayEvts.slice().sort((a, b) => new Date(a.utcISO) - new Date(b.utcISO));
+    const show = sorted.slice(0, 3), more = sorted.length - 3;
+    return `<div class="cal-dots">${show.map(e => `<div class="cal-dot ${dotCls(e)}"></div>`).join('')}${more > 0 ? `<span class="cal-more">+${more}</span>` : ''}</div>`;
+  };
+
+  let html = `<div class="cal-grid">${DOW.map(d => `<div class="cal-head">${d}</div>`).join('')}`;
+  for (let i = 0; i < firstDow; i++) html += `<div class="cal-cell empty"></div>`;
+  for (let day = 1; day <= lastDay; day++) {
+    const dateStr  = `${year}-${pad(month + 1)}-${pad(day)}`;
+    const dayEvts  = groups[dateStr] || [];
+    const isToday  = dateStr === today;
+    const isSel    = dateStr === schedCalDate;
+    const hasCls   = dayEvts.length > 0;
+    const cls = ['cal-cell', isToday && 'today', isSel && 'selected', !hasCls && 'no-class'].filter(Boolean).join(' ');
+    html += `<div class="${cls}"${hasCls ? ` onclick="selectCalDate('${dateStr}')"` : ''}>
+      <div class="cal-day">${day}</div>${cellDotsHTML(dayEvts)}</div>`;
   }
-  const groups = groupByDate(events);
-  listEl.innerHTML = Object.keys(groups).sort().map(d => schedDateGroupHTML(d, groups[d], today)).join('');
+  html += `</div>`;
+
+  // Day detail below grid
+  if (schedCalDate && groups[schedCalDate]) {
+    const d = new Date(schedCalDate + 'T12:00:00Z');
+    const lbl = schedCalDate === today ? 'Today'
+      : schedCalDate === addDays(today, 1) ? 'Tomorrow'
+      : schedCalDate === addDays(today, -1) ? 'Yesterday'
+      : d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const sorted = groups[schedCalDate].slice().sort((a, b) => new Date(a.utcISO) - new Date(b.utcISO));
+    html += `<div class="cal-detail-head${schedCalDate === today ? ' today' : ''}">${lbl}</div>
+      ${sorted.map(e => schedClassCardHTML(e, today)).join('')}`;
+  }
+
+  const listEl = document.getElementById('schedule-list');
+  listEl.innerHTML = html;
+
+  if (schedCalDate && groups[schedCalDate]) {
+    requestAnimationFrame(() => {
+      const el = listEl.querySelector('.cal-detail-head');
+      if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }
+}
+
+function selectCalDate(dateStr) {
+  schedCalDate = schedCalDate === dateStr ? null : dateStr;
+  renderSchedMonth();
 }
 
 // ── Render: Students ───────────────────────────────────────────────────────
