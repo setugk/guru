@@ -82,6 +82,18 @@
     .fab:active { box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
 
     /* Schedule */
+    .day-strip { display: flex; overflow-x: auto; gap: 8px; padding: 8px 16px 4px; scrollbar-width: none; }
+    .day-strip::-webkit-scrollbar { display: none; }
+    .day-pill { display: flex; flex-direction: column; align-items: center; padding: 8px 12px; border-radius: var(--radius); cursor: pointer; min-width: 50px; flex-shrink: 0; border: 1px solid var(--border); background: var(--bg); transition: all 0.12s; }
+    .day-pill.active { background: var(--accent); border-color: var(--accent); }
+    .day-pill.is-today:not(.active) { border-color: var(--accent); }
+    .dp-label { font-size: 11px; font-weight: 500; text-transform: uppercase; color: var(--text-3); }
+    .day-pill.active .dp-label { color: rgba(255,255,255,0.65); }
+    .dp-num { font-size: 18px; font-weight: 700; color: var(--text); margin-top: 2px; }
+    .day-pill.active .dp-num { color: #fff; }
+    .dp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 5px; }
+    .day-pill.active .dp-dot { background: rgba(255,255,255,0.6); }
+    .dp-dot-empty { height: 5px; margin-top: 5px; }
     .sched-mode-bar { display: flex; gap: 6px; padding: 12px 16px 8px; }
     .sched-mode-btn { flex: 1; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--bg); color: var(--text-3); font-family: inherit; transition: all 0.12s; }
     .sched-mode-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -535,7 +547,7 @@ let editingStudentId = null, viewingStudentId = null;
 let schedulingStudentId = null, scheduleSimpleMode = false;
 let editingBandishStudentId = null, editingBandishId = null;
 let currentTab = 'schedule';
-let schedMode = 'list', schedWeekOffset = 0, schedMonthOffset = 0;
+let schedMode = 'list', schedWeekOffset = 0, schedWeekDay = 0, schedMonthOffset = 0;
 let payStudentId = null;
 let showArchived = false, pastLessonsOpen = false, payUpToDateOpen = false;
 
@@ -688,6 +700,7 @@ function schedDateGroupHTML(dateStr, events, today) {
 function setSchedMode(mode) {
   schedMode = mode;
   schedWeekOffset = 0;
+  schedWeekDay = 0;
   schedMonthOffset = 0;
   document.querySelectorAll('.sched-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   renderSchedule();
@@ -726,24 +739,39 @@ function renderSchedList() {
 }
 
 function renderSchedWeek() {
-  const today = guruToday();
-  const start = addDays(today, schedWeekOffset * 7);
-  const days  = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const today   = guruToday();
+  const start   = addDays(today, schedWeekOffset * 7);
+  const days    = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const startFmt = new Date(start + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const endFmt   = new Date(addDays(start, 6) + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   document.getElementById('sched-nav').innerHTML = `
-    <button class="sched-nav-btn" onclick="schedWeekOffset--;renderSchedule()">‹</button>
+    <button class="sched-nav-btn" onclick="schedWeekOffset--;schedWeekDay=0;renderSchedule()">‹</button>
     <span class="sched-nav-label">${startFmt} – ${endFmt}</span>
-    <button class="sched-nav-btn" onclick="schedWeekOffset++;renderSchedule()">›</button>`;
+    <button class="sched-nav-btn" onclick="schedWeekOffset++;schedWeekDay=0;renderSchedule()">›</button>`;
+
   const grouped = groupByDate(getAllClassEvents());
-  document.getElementById('schedule-list').innerHTML = days.map(d => {
-    const evts  = grouped[d] || [];
+
+  // Pill strip
+  const strip = `<div class="day-strip">${days.map((d, i) => {
+    const hasCls  = !!(grouped[d] && grouped[d].length);
     const isToday = d === today;
-    const lbl   = d === today ? 'Today' : d === addDays(today, 1) ? 'Tomorrow'
-      : new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    if (!evts.length) return `<div class="sched-date-group"><div class="sched-date-head${isToday ? ' today' : ''}">${lbl}</div><div class="sched-no-class">No class</div></div>`;
-    return schedDateGroupHTML(d, evts, today);
-  }).join('');
+    return `<div class="day-pill${i === schedWeekDay ? ' active' : ''}${isToday && i !== schedWeekDay ? ' is-today' : ''}" onclick="schedWeekDay=${i};renderSchedule()">
+      <span class="dp-label">${dayLabel(d)}</span>
+      <span class="dp-num">${dayNum(d)}</span>
+      ${hasCls ? `<span class="dp-dot"></span>` : `<span class="dp-dot-empty"></span>`}
+    </div>`;
+  }).join('')}</div>`;
+
+  // Selected day content
+  const selDate = days[schedWeekDay];
+  const evts    = (grouped[selDate] || []).slice().sort((a, b) => new Date(a.utcISO) - new Date(b.utcISO));
+  const lbl     = selDate === today ? 'Today' : selDate === addDays(today, 1) ? 'Tomorrow'
+    : new Date(selDate + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const content = evts.length
+    ? `<div class="sched-date-head${selDate === today ? ' today' : ''}">${lbl}</div>${evts.map(e => schedClassCardHTML(e, today)).join('')}`
+    : `<div class="sched-date-head${selDate === today ? ' today' : ''}">${lbl}</div><div class="empty-state" style="padding:36px 32px;"><div class="empty-icon">🥁</div><div class="empty-title">No classes</div><div class="empty-desc">Tap + to schedule a class</div></div>`;
+
+  document.getElementById('schedule-list').innerHTML = strip + content;
 }
 
 function renderSchedMonth() {
@@ -1484,8 +1512,12 @@ schedView.addEventListener('touchend', e => {
   swipeStartX = swipeStartY = null;
   if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
   if (schedMode === 'week') {
-    if (dx < 0) { schedWeekOffset++; renderSchedule(); }
-    else        { schedWeekOffset--; renderSchedule(); }
+    if (dx < 0) {
+      if (schedWeekDay < 6) { schedWeekDay++; } else { schedWeekOffset++; schedWeekDay = 0; }
+    } else {
+      if (schedWeekDay > 0) { schedWeekDay--; } else { schedWeekOffset--; schedWeekDay = 6; }
+    }
+    renderSchedule();
   } else if (schedMode === 'month') {
     if (dx < 0) { schedMonthOffset++; renderSchedule(); }
     else        { schedMonthOffset--; renderSchedule(); }
