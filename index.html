@@ -1705,7 +1705,13 @@ function saveSettingsForm() {
 }
 
 // ── Sheet helpers ──────────────────────────────────────────────────────────
-function openSheet(id)  { document.getElementById('overlay').classList.add('visible'); document.getElementById(id).classList.add('open'); }
+function openSheet(id)  {
+  document.getElementById('overlay').classList.add('visible');
+  const el = document.getElementById(id);
+  el.classList.add('open');
+  const body = el.querySelector('.sheet-body');
+  if (body) body.scrollTop = 0;
+}
 function closeSheet(id) { document.getElementById(id).classList.remove('open'); if (!document.querySelectorAll('.sheet.open').length) document.getElementById('overlay').classList.remove('visible'); }
 function closeAllSheets() { document.querySelectorAll('.sheet.open').forEach(s=>s.classList.remove('open')); document.getElementById('overlay').classList.remove('visible'); }
 function openStudentPage()  { document.getElementById('student-page').classList.add('open'); }
