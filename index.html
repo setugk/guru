@@ -293,7 +293,7 @@
 <body>
 <div id="app">
   <header id="header">
-    <span class="header-title">Guru Bandhu<span class="app-version">v1.27</span></span>
+    <span class="header-title">Guru Bandhu<span class="app-version">v1.28</span></span>
     <button class="header-action" id="settings-btn" aria-label="Settings">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -696,7 +696,9 @@ function getPaymentStatus(s) {
   const owedClasses = Math.max(0, unpaid);
   const amountDue   = owedClasses * rate;
   const progress    = owedClasses % cadence;
-  return { cadence, rate, completed, paidClasses, unpaid, owedClasses, amountDue, progress, isDue: owedClasses > 0 };
+  const isDue       = owedClasses >= cadence;
+  const isPastDue   = owedClasses > cadence;
+  return { cadence, rate, completed, paidClasses, unpaid, owedClasses, amountDue, progress, isDue, isPastDue };
 }
 
 function classesOnDate(dateStr) {
@@ -1077,7 +1079,7 @@ function renderPayments() {
             <div class="avatar">${esc(initials(s.name))}</div>
             <div class="pay-card-info">
               <div class="pay-student-name">${esc(s.name)}</div>
-              <div class="pay-amount">${ps.progress}/${ps.cadence} classes toward next</div>
+              <div class="pay-amount">${ps.owedClasses > 0 ? `${ps.owedClasses} of ${ps.cadence} classes completed` : 'All caught up'}</div>
             </div>
           </div>`;
       }).join('');
@@ -1188,12 +1190,24 @@ function renderDetailPayments(s) {
   if (!ps.rate) {
     statusHTML = `<div class="pay-status-card na"><p style="font-size:13px;color:var(--text-3);">No fees set — edit student profile to add a per-class fee and payment cadence.</p></div>`;
   } else if (ps.isDue) {
+    const label   = ps.isPastDue ? 'Payment past due' : 'Payment due';
+    const subMsg  = ps.isPastDue
+      ? `${ps.owedClasses} classes completed — payment was missed`
+      : `${ps.owedClasses} class${ps.owedClasses!==1?'es':''} completed`;
     statusHTML = `
       <div class="pay-status-card due">
-        <div style="font-size:12px;font-weight:600;color:#92400E;text-transform:uppercase;letter-spacing:0.4px;">Balance due</div>
+        <div style="font-size:12px;font-weight:600;color:#92400E;text-transform:uppercase;letter-spacing:0.4px;">${label}</div>
         <div style="font-size:26px;font-weight:700;color:#92400E;margin:4px 0;">${c}${ps.amountDue.toLocaleString()}</div>
-        <div style="font-size:12px;color:#A16207;">${ps.owedClasses} class${ps.owedClasses!==1?'es':''} × ${c}${ps.rate.toLocaleString()}/class</div>
+        <div style="font-size:12px;color:#A16207;">${subMsg}</div>
         <button class="btn btn-primary" style="width:100%;margin-top:14px;" onclick="openPaySheet('${s.id}')">Mark paid</button>
+      </div>`;
+  } else if (ps.owedClasses > 0) {
+    const moreNeeded = ps.cadence - ps.owedClasses;
+    const moreStr = moreNeeded === 1 ? 'next class' : `${moreNeeded} more classes`;
+    statusHTML = `
+      <div class="pay-status-card na">
+        <div style="font-size:13px;color:var(--text-2);">${ps.owedClasses} class${ps.owedClasses!==1?'es':''} completed</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Payment due after ${moreStr}</div>
       </div>`;
   } else {
     const creditClasses = Math.max(0, -ps.unpaid);
