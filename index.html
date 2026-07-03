@@ -1442,17 +1442,10 @@ function saveScheduleClass() {
   const s = students.find(x=>x.id===sid);
   if (!s) return;
 
-  const now = new Date();
-  if (s.nextClass) {
-    if (new Date(s.nextClass.utcISO) < now) {
-      // Past nextClass → archive to history for marking
-      if (!s.classHistory) s.classHistory = [];
-      s.classHistory.push({ ...s.nextClass, id: uid(), status: null });
-    } else {
-      // Future nextClass — confirm before overwriting
-      const existingDate = new Date(s.nextClass.utcISO).toLocaleDateString('en-US', { timeZone: guruTZ, weekday: 'short', month: 'short', day: 'numeric' });
-      if (!confirm(`${s.name} already has a class on ${existingDate}. Replace it with the new one?`)) return;
-    }
+  if (s.nextClass && new Date(s.nextClass.utcISO) < new Date()) {
+    // Past nextClass → archive to history for marking
+    if (!s.classHistory) s.classHistory = [];
+    s.classHistory.push({ ...s.nextClass, id: uid(), status: null });
   }
 
   const newUtcISO = guruLocalToUTC(date, time);
