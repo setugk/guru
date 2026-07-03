@@ -473,19 +473,19 @@
     <div id="sc-student-label-group" style="display:none;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px;">
       <span style="font-size:15px;font-weight:600;" id="sc-student-label"></span>
     </div>
-    <!-- Date + time -->
-    <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="sc-date"></div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Your time</label><input type="time" class="form-input" id="sc-time"></div>
-      <div class="form-group" id="sc-stu-time-group" style="display:none">
-        <label class="form-label" id="sc-stu-time-label">Student's time</label>
-        <div class="form-display" id="sc-stu-time">—</div>
+    <!-- Date + time + notes (hidden until student selected in create mode) -->
+    <div id="sc-fields">
+      <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="sc-date"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Your time</label><input type="time" class="form-input" id="sc-time"></div>
+        <div class="form-group" id="sc-stu-time-group" style="display:none">
+          <label class="form-label" id="sc-stu-time-label">Student's time</label>
+          <div class="form-display" id="sc-stu-time">—</div>
+        </div>
       </div>
+      <div class="form-group"><label class="form-label">Notes</label><input type="text" class="form-input" id="sc-notes" placeholder="optional"></div>
+      <div class="conflict-box" id="sc-conflict"></div>
     </div>
-    <!-- Notes (always visible) -->
-    <div class="form-group"><label class="form-label">Notes</label><input type="text" class="form-input" id="sc-notes" placeholder="optional"></div>
-    <!-- Conflict warning -->
-    <div class="conflict-box" id="sc-conflict"></div>
     <!-- Extra fields (hidden in simple/create mode) -->
     <div id="sc-extra-fields">
       <div class="form-group"><label class="form-label">Duration (min)</label><input type="number" class="form-input" id="sc-duration" placeholder="60" min="15" step="15"></div>
@@ -1346,17 +1346,14 @@ function openScheduleSheet(studentId, simple) {
   document.getElementById('sc-student-group').style.display = isCreate ? 'block' : 'none';
   document.getElementById('sc-student-label-group').style.display = isCreate ? 'none' : 'block';
   document.getElementById('sc-extra-fields').style.display = simple ? 'none' : 'block';
+  document.getElementById('sc-fields').style.display = isCreate ? 'none' : 'block';
 
   if (isCreate) {
-    // populate student dropdown
+    // populate student dropdown; fields stay hidden until student picked
     const sel = document.getElementById('sc-student-select');
     sel.innerHTML = `<option value="">Select student…</option>` +
       students.filter(x=>!x.archived).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
-    sel.value = studentId || '';
-    document.getElementById('sc-date').value = guruToday();
-    document.getElementById('sc-time').value = '';
-    document.getElementById('sc-duration').value = s?.classDuration || 60;
-    document.getElementById('sc-notes').value = '';
+    sel.value = '';
     document.getElementById('sc-clear').style.display = 'none';
   } else {
     document.getElementById('sc-student-label').textContent = s?.name || '';
@@ -1815,7 +1812,18 @@ document.getElementById('sc-clear').addEventListener('click', clearNextClass);
 });
 document.getElementById('sc-student-select').addEventListener('change', ()=>{
   const id = document.getElementById('sc-student-select').value;
-  if (id) { const s=students.find(x=>x.id===id); if(s){ document.getElementById('sc-duration').value=s.classDuration||60; } }
+  if (id) {
+    document.getElementById('sc-fields').style.display = 'block';
+    const s = students.find(x=>x.id===id);
+    if (s) {
+      document.getElementById('sc-date').value = guruToday();
+      document.getElementById('sc-time').value = s.classTime || '';
+      document.getElementById('sc-duration').value = s.classDuration || 60;
+      document.getElementById('sc-notes').value = '';
+    }
+  } else {
+    document.getElementById('sc-fields').style.display = 'none';
+  }
   updateSchedulePreview();
 });
 
