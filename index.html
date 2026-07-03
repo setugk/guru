@@ -293,7 +293,7 @@
 <body>
 <div id="app">
   <header id="header">
-    <span class="header-title">Guru Bandhu<span class="app-version">v1.31</span></span>
+    <span class="header-title">Guru Bandhu<span class="app-version">v1.32</span></span>
     <button class="header-action" id="settings-btn" aria-label="Settings">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -1193,11 +1193,11 @@ function renderDetailPayments(s) {
   let statusHTML;
   if (!ps.rate) {
     statusHTML = `<div class="pay-status-card na"><p style="font-size:13px;color:var(--text-3);">No fees set — edit student profile to add a per-class fee and payment cadence.</p></div>`;
-  } else if (ps.owedClasses > 0 || ps.dollarBalance > 0) {
+  } else if (ps.dollarBalance > 0) {
     let label, subMsg;
     if (ps.isPastDue) {
       label  = 'Payment past due';
-      subMsg = `${ps.owedClasses} classes completed — payment was missed`;
+      subMsg = `${ps.owedClasses} class${ps.owedClasses!==1?'es':''} unpaid — payment was missed`;
     } else if (ps.owedClasses >= ps.cadence) {
       label  = 'Payment due';
       subMsg = `${ps.owedClasses} class${ps.owedClasses!==1?'es':''} completed`;
@@ -1207,7 +1207,7 @@ function renderDetailPayments(s) {
       subMsg = `${ps.owedClasses} class${ps.owedClasses!==1?'es':''} completed · payment due after ${moreNeeded === 1 ? 'next class' : `${moreNeeded} more classes`}`;
     } else {
       label  = 'Balance due';
-      subMsg = `All classes paid for · ${c}${ps.totalCollected.toLocaleString()} received of ${c}${ps.totalAccrued.toLocaleString()}`;
+      subMsg = `${c}${ps.totalCollected.toLocaleString()} received of ${c}${ps.totalAccrued.toLocaleString()} total`;
     }
     statusHTML = `
       <div class="pay-status-card due">
@@ -1217,12 +1217,14 @@ function renderDetailPayments(s) {
         <button class="btn btn-primary" style="width:100%;margin-top:14px;" onclick="openPaySheet('${s.id}')">Mark paid</button>
       </div>`;
   } else {
-    const creditClasses = Math.max(0, -ps.unpaid);
-    const creditNote = creditClasses > 0 ? ` · ${creditClasses} class${creditClasses!==1?'es':''} ahead` : '';
+    const overpaid = ps.rate ? Math.max(0, ps.totalCollected - ps.totalAccrued) : 0;
+    const note = overpaid > 0
+      ? `${c}${overpaid.toLocaleString()} overpaid · ${ps.completed} completed`
+      : `${ps.completed} completed · ${ps.paidClasses} paid for`;
     statusHTML = `
       <div class="pay-status-card ok">
         <div style="font-size:12px;font-weight:600;color:var(--success);text-transform:uppercase;letter-spacing:0.4px;">All caught up</div>
-        <div style="font-size:13px;color:var(--text-3);margin-top:8px;">${ps.completed} completed · ${ps.paidClasses} paid for${creditNote}</div>
+        <div style="font-size:13px;color:var(--text-3);margin-top:8px;">${note}</div>
       </div>`;
   }
 
@@ -1295,7 +1297,14 @@ function renderClassesPanel(s) {
   }
   pastItems.sort((a, b) => new Date(b.utcISO) - new Date(a.utcISO));
 
-  historyEl.innerHTML = '<div class="lessons-section-head"><span class="lessons-section-title">Past classes</span></div>';
+  const completedCount = pastItems.filter(c => c.status === 'completed').length;
+  const missedCount    = pastItems.filter(c => c.status === 'missed').length;
+  const summaryParts   = [];
+  if (completedCount) summaryParts.push(`<span style="color:var(--success)">${completedCount} completed</span>`);
+  if (missedCount)    summaryParts.push(`<span style="color:var(--danger,#ef4444)">${missedCount} missed</span>`);
+  const summarySuffix  = summaryParts.length ? ` <span style="font-weight:400;font-size:11px;color:var(--text-muted);">· ${summaryParts.join(' · ')}</span>` : '';
+
+  historyEl.innerHTML = `<div class="lessons-section-head"><span class="lessons-section-title">Past classes${summarySuffix}</span></div>`;
 
   if (!pastItems.length) {
     historyEl.innerHTML += `<p style="color:var(--text-muted);font-size:13px;padding:6px 0;">No past classes recorded yet.</p>`;
