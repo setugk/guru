@@ -719,7 +719,7 @@ function schedClassCardHTML(e, today) {
     onclick="toggleSchedCard(this)"
     data-key="${key}"
     data-sid="${s.id}"
-    data-is-past="${e.isPast}"
+    data-utc="${e.utcISO}"
     data-is-history="${e.isHistory}"
     data-hist-id="${e.histId||''}"
     data-status="${e.status||''}">
@@ -1292,8 +1292,8 @@ function toggleSchedCard(el) {
   el.classList.add('expanded');
 
   const sid       = el.dataset.sid;
-  const isPast    = el.dataset.isPast === 'true';
   const isHistory = el.dataset.isHistory === 'true';
+  const isPast    = isHistory || new Date(el.dataset.utc) < new Date();
   const histId    = el.dataset.histId || '';
   const status    = el.dataset.status || '';
 
