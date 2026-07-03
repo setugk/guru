@@ -293,7 +293,7 @@
 <body>
 <div id="app">
   <header id="header">
-    <span class="header-title">Guru Bandhu<span class="app-version">v1.20</span></span>
+    <span class="header-title">Guru Bandhu<span class="app-version">v1.21</span></span>
     <button class="header-action" id="settings-btn" aria-label="Settings">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -569,6 +569,14 @@
   <div class="sheet-header"><span class="sheet-title">Settings</span><button class="sheet-close" id="stg-close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
   <div class="sheet-body">
     <div class="form-group"><label class="form-label">Teacher name</label><input type="text" class="form-input" id="s-name" placeholder="Your name"></div>
+    <div class="form-group">
+      <label class="form-label">Week starts on</label>
+      <select class="form-input" id="s-week-start">
+        <option value="0">Sunday</option>
+        <option value="1">Monday</option>
+        <option value="6">Saturday</option>
+      </select>
+    </div>
     <div class="info-row"><span class="info-row-label">Your timezone</span><span class="info-row-val" id="s-tz-display"></span></div>
     <p class="form-hint">Automatically detected from your device. Updates when you travel.</p>
   </div>
@@ -621,7 +629,7 @@ let showArchived = false, pastLessonsOpen = false, payUpToDateOpen = false;
 // ── Persistence ────────────────────────────────────────────────────────────
 function load() {
   try { students = JSON.parse(localStorage.getItem(LS_STUDENTS)) || []; } catch { students = []; }
-  try { settings = { teacherName: '', ...JSON.parse(localStorage.getItem(LS_SETTINGS)) }; } catch {}
+  try { settings = { teacherName: '', weekStartDay: 0, ...JSON.parse(localStorage.getItem(LS_SETTINGS)) }; } catch {}
   // migrate: ensure every payment has an id (old records may be missing one)
   students.forEach(s => (s.payments||[]).forEach(p => { if (!p.id) p.id = uid(); }));
 }
@@ -812,7 +820,12 @@ function setSchedMode(mode) {
 
 function goToToday() {
   if (schedMode === 'month') { schedMonthOffset = 0; schedCalDate = null; }
-  else { schedWeekOffset = 0; schedWeekDay = 0; }
+  else {
+    schedWeekOffset = 0;
+    const wsd = settings.weekStartDay ?? 0;
+    const dow = new Date(guruToday() + 'T12:00:00Z').getDay();
+    schedWeekDay = (dow - wsd + 7) % 7;
+  }
   renderSchedule();
 }
 
@@ -844,9 +857,24 @@ function renderSchedList(scrollToDate) {
   });
 }
 
+function currentWeekStart() {
+  const today = guruToday();
+  const wsd = settings.weekStartDay ?? 0;
+  const dow = new Date(today + 'T12:00:00Z').getDay(); // 0=Sun
+  const back = (dow - wsd + 7) % 7;
+  return addDays(today, -back);
+}
+function dateToWeekCoords(dateStr) {
+  const ws = currentWeekStart();
+  const [wy, wm, wd] = ws.split('-').map(Number);
+  const [dy, dm, dd] = dateStr.split('-').map(Number);
+  const diff = Math.round((Date.UTC(dy, dm-1, dd) - Date.UTC(wy, wm-1, wd)) / 86400000);
+  return { offset: Math.floor(diff / 7), day: ((diff % 7) + 7) % 7 };
+}
+
 function renderSchedWeek() {
   const today   = guruToday();
-  const start   = addDays(today, schedWeekOffset * 7);
+  const start   = addDays(currentWeekStart(), schedWeekOffset * 7);
   const days    = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const startFmt = new Date(start + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const endFmt   = new Date(addDays(start, 6) + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -902,14 +930,16 @@ function renderSchedMonth() {
     if (d >= mStart && d <= mEnd) { if (!groups[d]) groups[d] = []; groups[d].push(e); }
   });
 
+  const wsd = settings.weekStartDay ?? 0;
+  const DOW_ALL = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const DOW = [...DOW_ALL.slice(wsd), ...DOW_ALL.slice(0, wsd)];
   const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
-  const DOW     = ['Su','Mo','Tu','We','Th','Fr','Sa'];
-
+  const firstCol = (firstDow - wsd + 7) % 7;
 
   const cellDotsHTML = dayEvts => classDots(dayEvts);
 
   let html = `<div class="cal-grid">${DOW.map(d => `<div class="cal-head">${d}</div>`).join('')}`;
-  for (let i = 0; i < firstDow; i++) html += `<div class="cal-cell empty"></div>`;
+  for (let i = 0; i < firstCol; i++) html += `<div class="cal-cell empty"></div>`;
   for (let day = 1; day <= lastDay; day++) {
     const dateStr  = `${year}-${pad(month + 1)}-${pad(day)}`;
     const dayEvts  = groups[dateStr] || [];
@@ -1494,13 +1524,10 @@ function saveScheduleClass() {
 
   // Switch to Week view showing the newly scheduled class
   const newDateStr = utcToGuruDateStr(newUtcISO);
-  const todayStr   = guruToday();
-  const [ty, tm, td] = todayStr.split('-').map(Number);
-  const [ny, nm, nd] = newDateStr.split('-').map(Number);
-  const diff = Math.round((Date.UTC(ny, nm-1, nd) - Date.UTC(ty, tm-1, td)) / 86400000);
+  const coords = dateToWeekCoords(newDateStr);
   schedMode = 'week';
-  schedWeekOffset = Math.floor(diff / 7);
-  schedWeekDay = ((diff % 7) + 7) % 7;
+  schedWeekOffset = coords.offset;
+  schedWeekDay = coords.day;
   renderSchedule();
   if (currentTab==='students') renderStudents(document.getElementById('search-input').value);
   if (viewingStudentId === sid && document.getElementById('student-page').classList.contains('open')) {
@@ -1744,12 +1771,15 @@ function saveLessonNotes() {
 // ── Settings ───────────────────────────────────────────────────────────────
 function openSettings() {
   document.getElementById('s-name').value = settings.teacherName||'';
+  document.getElementById('s-week-start').value = String(settings.weekStartDay ?? 0);
   document.getElementById('s-tz-display').textContent = `${guruTZ.replace(/_/g,' ')} (${tzAbbr(guruTZ)})`;
   openSheet('settings-sheet');
 }
 function saveSettingsForm() {
   settings.teacherName = document.getElementById('s-name').value.trim();
+  settings.weekStartDay = parseInt(document.getElementById('s-week-start').value, 10);
   saveSettings(); closeSheet('settings-sheet');
+  renderSchedule();
 }
 
 // ── Sheet helpers ──────────────────────────────────────────────────────────
