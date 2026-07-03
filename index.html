@@ -293,7 +293,7 @@
 <body>
 <div id="app">
   <header id="header">
-    <span class="header-title">Guru Bandhu<span class="app-version">v1.22</span></span>
+    <span class="header-title">Guru Bandhu<span class="app-version">v1.23</span></span>
     <button class="header-action" id="settings-btn" aria-label="Settings">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -1191,15 +1191,11 @@ function renderDetailPayments(s) {
     const dueCls = ps.batches * ps.cadence;
     statusHTML = `
       <div class="pay-status-card due">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-          <div>
-            <div style="font-size:12px;font-weight:600;color:#92400E;text-transform:uppercase;letter-spacing:0.4px;">Payment due</div>
-            <div style="font-size:26px;font-weight:700;color:#92400E;margin:4px 0;">${c}${ps.amountDue.toLocaleString()}</div>
-            <div style="font-size:12px;color:#A16207;">${dueCls} class${dueCls!==1?'es':''} · ${ps.batches} batch${ps.batches!==1?'es':''}</div>
-          </div>
-          <button class="btn btn-primary" style="flex-shrink:0;padding:10px 16px;font-size:14px;" onclick="openPaySheet('${s.id}')">Mark paid</button>
-        </div>
-        ${ps.progress > 0 ? `<div style="font-size:12px;color:#A16207;margin-top:10px;padding-top:10px;border-top:1px solid rgba(245,158,11,0.3);">+${ps.progress} more class${ps.progress!==1?'es':''} accumulating toward next batch</div>` : ''}
+        <div style="font-size:12px;font-weight:600;color:#92400E;text-transform:uppercase;letter-spacing:0.4px;">Payment due</div>
+        <div style="font-size:26px;font-weight:700;color:#92400E;margin:4px 0;">${c}${ps.amountDue.toLocaleString()}</div>
+        <div style="font-size:12px;color:#A16207;">${dueCls} class${dueCls!==1?'es':''} · ${ps.batches} batch${ps.batches!==1?'es':''}</div>
+        ${ps.progress > 0 ? `<div style="font-size:12px;color:#A16207;margin-top:8px;">+${ps.progress} more class${ps.progress!==1?'es':''} accumulating toward next batch</div>` : ''}
+        <button class="btn btn-primary" style="width:100%;margin-top:14px;" onclick="openPaySheet('${s.id}')">Mark paid</button>
       </div>`;
   } else {
     const pct = ps.cadence > 0 ? Math.round(ps.progress / ps.cadence * 100) : 0;
